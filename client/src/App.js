@@ -46,6 +46,7 @@ function App() {
   
   // Simple auth functions
   const login = (role) => {
+    console.log("Loginnnn");
     setIsAuthenticated(true);
     setUserRole(role);
   };

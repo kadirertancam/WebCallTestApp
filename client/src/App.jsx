@@ -60,10 +60,28 @@ const App = () => {
   const [initialized, setInitialized] = useState(false);
   
   // Initialize application
-  useEffect(() => {
-    // Check authentication status, load initial data, etc.
-    setInitialized(true);
-  }, []);
+ // AuthContext veya App bileşeni içinde
+useEffect(() => {
+  const loadUser = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      console.log(token);
+      if (token) {
+        const response = await userService.getCurrentUser();
+        setCurrentUser(response.data.data || response.data);
+        setIsAuthenticated(true); // Token varsa kullanıcıyı giriş yapmış olarak işaretle
+      }
+    } catch (err) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+    }
+    setLoading(false);
+  };
+
+  loadUser();
+}, []);
   
   if (!initialized) {
     return <div className="app-loading">Loading application...</div>;
@@ -142,7 +160,7 @@ const App = () => {
         
         {/* Member Routes */}
         <Route element={<MemberLayout />}>
-          <Route path="/member/dashboard" element={
+          <Route  path="/member/*" element={
             <ProtectedRoute 
               element={<MemberDashboard />} 
               allowedRoles={['member']} 

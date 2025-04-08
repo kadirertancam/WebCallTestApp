@@ -2,32 +2,20 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+// In server/middleware/auth.js
 exports.protect = async (req, res, next) => {
   try {
     let token;
     
-    // Check for token in Authorization header
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
-    } 
-    // If no token in header, check for token in session
-    else if (req.session.userId) {
-      // Create token from session data if needed
-      const user = await User.findById(req.session.userId);
-      if (user) {
-        req.user = {
-          id: user._id,
-          role: user.role
-        };
-        return next();
-      }
     }
 
     if (!token) {
       return res.status(401).json({ message: 'Not authorized to access this route' });
     }
 
-    // Verify token
+    // Verify token - make sure JWT_SECRET is correctly set in your environment variables
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
     
     // Check if user still exists

@@ -137,7 +137,8 @@ exports.login = async (req, res) => {
       user.refreshToken = refreshToken;
       user.lastLogin = new Date();
       await user.save();
-      
+      console.log(accessToken);
+      console.log(refreshToken);
       // Set refresh token as HTTP-only cookie
       res.cookie('refreshToken', refreshToken, {
         httpOnly: true,
