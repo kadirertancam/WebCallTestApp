@@ -118,7 +118,7 @@ export const adminService = {
   updateSystemSettings: (settings) => api.put('/admin/settings', settings)
 };
 
-export default {
+const apiServices = {
   authService,
   userService,
   serviceAdService,
@@ -126,3 +126,4 @@ export default {
   callService,
   adminService
 };
+export default apiServices;

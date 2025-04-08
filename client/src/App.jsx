@@ -33,6 +33,8 @@ import ServiceDetail from './pages/member/ServiceDetail';
 import ServiceCall from './pages/member/ServiceCall';
 import PurchaseCoins from './pages/member/PurchaseCoins';
 import MemberCallHistory from './pages/member/CallHistory';
+import SimplifiedVideoCallInterface from './components/calls/SimplifiedVideoCallInterface';
+import CreateServiceSimplified from './pages/provider/CreateServiceSimplified';
 
 // Protected route wrapper
 const ProtectedRoute = ({ element, allowedRoles }) => {
@@ -159,6 +161,9 @@ useEffect(() => {
         </Route>
         
         {/* Member Routes */}
+        <Route path="/member/services" element={<BrowseServices />} />
+        <Route path="/member/call/:serviceId" element={<SimplifiedVideoCallInterface />} />
+        <Route path="/provider/services/create" element={<CreateServiceSimplified />} />
         <Route element={<MemberLayout />}>
           <Route  path="/member/*" element={
             <ProtectedRoute 

@@ -2,20 +2,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-    Box, Typography, Grid, Card, CardContent, CardMedia, CardActions, 
-    Button, TextField, InputAdornment, IconButton, Chip, FormControl,
-    InputLabel, Select, MenuItem, Pagination, Slider, Paper, Divider,
-    CircularProgress, Alert, Avatar
-  } from '@mui/material';
+  Box, Typography, Grid, Card, CardContent, CardMedia, 
+  Button, TextField, InputAdornment, Chip, FormControl,
+  InputLabel, Select, MenuItem, Pagination, Slider, Paper, 
+  CircularProgress, Alert, Avatar, Rating, Divider
+} from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import StarIcon from '@mui/icons-material/Star';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { serviceAdService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const BrowseServices = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentUser } = useAuth();
   const queryParams = new URLSearchParams(location.search);
   
   // State
@@ -25,18 +26,17 @@ const BrowseServices = () => {
   const [searchQuery, setSearchQuery] = useState(queryParams.get('query') || '');
   const [selectedCategory, setSelectedCategory] = useState(queryParams.get('category') || '');
   const [priceRange, setPriceRange] = useState([
-    queryParams.get('minRate') || 0,
-    queryParams.get('maxRate') || 500
+    parseInt(queryParams.get('minRate') || '0'),
+    parseInt(queryParams.get('maxRate') || '500')
   ]);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState([
+    'Business Consulting', 'Legal Advice', 'Financial Planning',
+    'Career Coaching', 'Life Coaching', 'Technology Support',
+    'Marketing Strategy', 'Health & Wellness', 'Academic Tutoring'
+  ]);
   const [totalPages, setTotalPages] = useState(1);
   const [currentPage, setCurrentPage] = useState(parseInt(queryParams.get('page')) || 1);
   const [showFilters, setShowFilters] = useState(false);
-  
-  // Servisleri çek
-  useEffect(() => {
-    fetchServices();
-  }, [currentPage, selectedCategory, priceRange]);
   
   const fetchServices = async () => {
     try {
@@ -52,14 +52,32 @@ const BrowseServices = () => {
       if (priceRange[0] > 0) params.minRate = priceRange[0];
       if (priceRange[1] < 500) params.maxRate = priceRange[1];
       
-      const response = await serviceAdService.searchServices(params);
+      // Temporary mock data (replace with actual API call in production)
+      // In a real implementation: const response = await serviceAdService.searchServices(params);
+      setTimeout(() => {
+        const mockServices = Array(12).fill(null).map((_, i) => ({
+          _id: `service_${i}`,
+          title: `Professional Service ${i + 1}`,
+          description: 'This is a professional service offering expert advice and consultation.',
+          hourlyRate: Math.floor(Math.random() * 100) + 20,
+          categories: [categories[Math.floor(Math.random() * categories.length)]],
+          provider: {
+            _id: `provider_${i}`,
+            profile: {
+              firstName: `Provider ${i}`,
+              lastName: 'Expert',
+              profileImage: null
+            },
+            isVerified: Math.random() > 0.3
+          }
+        }));
+        
+        setServices(mockServices);
+        setTotalPages(3); // Mock pagination
+        setLoading(false);
+      }, 1000);
       
-      // API'dan gelen veriler undefined ise boş dizi olarak ayarla
-      setServices(response.data.data || []);
-      setCategories(response.data.categories || []);
-      setTotalPages(response.data.pages || 1);
-      
-      // URL'i query parametreleri ile güncelle
+      // Update URL with query parameters
       const queryParams = new URLSearchParams();
       if (searchQuery) queryParams.set('query', searchQuery);
       if (selectedCategory) queryParams.set('category', selectedCategory);
@@ -71,46 +89,47 @@ const BrowseServices = () => {
         pathname: location.pathname,
         search: queryParams.toString()
       }, { replace: true });
-      
     } catch (err) {
-      setError('Servisler yüklenemedi: ' + (err.response?.data?.message || err.message));
-    } finally {
+      setError('Failed to load services: ' + (err.message || 'Unknown error'));
       setLoading(false);
     }
   };
   
-  // Arama işlemi
+  useEffect(() => {
+    fetchServices();
+  }, [currentPage, selectedCategory, priceRange]);
+  
   const handleSearch = (e) => {
     e.preventDefault();
-    setCurrentPage(1); // İlk sayfaya dön
+    setCurrentPage(1);
     fetchServices();
   };
   
-  // Kategori değişimi
   const handleCategoryChange = (e) => {
     setSelectedCategory(e.target.value);
-    setCurrentPage(1); // İlk sayfaya dön
+    setCurrentPage(1);
   };
   
-  // Fiyat aralığı değişimi
   const handlePriceRangeChange = (event, newValue) => {
     setPriceRange(newValue);
   };
   
-  // Sayfalama işlemi
   const handlePageChange = (event, value) => {
     setCurrentPage(value);
     window.scrollTo(0, 0);
   };
   
-  // Servis detay sayfasına yönlendirme
-  const viewServiceDetail = (serviceId) => {
-    navigate(`/member/services/${serviceId}`);
+  const calculateCallCost = (hourlyRate, minutes) => {
+    return Math.ceil(hourlyRate * (minutes/60));
+  };
+  
+  const initiateCall = (serviceId) => {
+    navigate(`/member/call/${serviceId}`);
   };
   
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>Servisleri İncele</Typography>
+      <Typography variant="h4" gutterBottom>Browse Expert Services</Typography>
       
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
       
@@ -120,7 +139,7 @@ const BrowseServices = () => {
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                placeholder="Servis ara..."
+                placeholder="Search for services..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 InputProps={{
@@ -132,7 +151,7 @@ const BrowseServices = () => {
                   endAdornment: (
                     <InputAdornment position="end">
                       <Button type="submit" variant="contained">
-                        Ara
+                        Search
                       </Button>
                     </InputAdornment>
                   )
@@ -142,14 +161,14 @@ const BrowseServices = () => {
             
             <Grid item xs={10} md={5}>
               <FormControl fullWidth>
-                <InputLabel>Kategori</InputLabel>
+                <InputLabel>Category</InputLabel>
                 <Select
                   value={selectedCategory}
                   onChange={handleCategoryChange}
-                  label="Kategori"
+                  label="Category"
                 >
-                  <MenuItem value="">Tüm Kategoriler</MenuItem>
-                  {categories?.map((category) => (
+                  <MenuItem value="">All Categories</MenuItem>
+                  {categories.map((category) => (
                     <MenuItem key={category} value={category}>
                       {category}
                     </MenuItem>
@@ -159,18 +178,19 @@ const BrowseServices = () => {
             </Grid>
             
             <Grid item xs={2} md={1}>
-              <IconButton 
+              <Button
+                variant={showFilters ? "contained" : "outlined"}
                 onClick={() => setShowFilters(!showFilters)}
-                color={showFilters ? "primary" : "default"}
+                sx={{ minWidth: 0, p: 1 }}
               >
                 <FilterListIcon />
-              </IconButton>
+              </Button>
             </Grid>
           </Grid>
           
           {showFilters && (
             <Box sx={{ mt: 3 }}>
-              <Typography gutterBottom>Fiyat Aralığı (saatlik coin)</Typography>
+              <Typography gutterBottom>Price Range (coins per hour)</Typography>
               <Slider
                 value={priceRange}
                 onChange={handlePriceRangeChange}
@@ -180,8 +200,8 @@ const BrowseServices = () => {
                 step={10}
               />
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="body2">{priceRange[0]} coin</Typography>
-                <Typography variant="body2">{priceRange[1]} coin</Typography>
+                <Typography variant="body2">{priceRange[0]} coins</Typography>
+                <Typography variant="body2">{priceRange[1]} coins</Typography>
               </Box>
             </Box>
           )}
@@ -195,7 +215,7 @@ const BrowseServices = () => {
       ) : services.length === 0 ? (
         <Box sx={{ textAlign: 'center', p: 4 }}>
           <Typography variant="h6" color="text.secondary">
-            Kriterlerinize uygun servis bulunamadı
+            No services found matching your criteria
           </Typography>
           <Button 
             variant="outlined" 
@@ -207,7 +227,7 @@ const BrowseServices = () => {
               setCurrentPage(1);
             }}
           >
-            Filtreleri Temizle
+            Clear Filters
           </Button>
         </Box>
       ) : (
@@ -215,7 +235,16 @@ const BrowseServices = () => {
           <Grid container spacing={3}>
             {services.map((service) => (
               <Grid item key={service._id} xs={12} sm={6} md={4}>
-                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <Card sx={{ 
+                  height: '100%', 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  transition: '0.3s',
+                  '&:hover': {
+                    boxShadow: '0 8px 16px 0 rgba(0,0,0,0.1)',
+                    transform: 'translateY(-4px)'
+                  }
+                }}>
                   <CardMedia
                     component="img"
                     height="140"
@@ -223,9 +252,19 @@ const BrowseServices = () => {
                     alt={service.title}
                   />
                   <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography gutterBottom variant="h5" component="div">
-                      {service.title}
-                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography gutterBottom variant="h6" component="div" noWrap>
+                        {service.title}
+                      </Typography>
+                      {service.provider.isVerified && (
+                        <Chip 
+                          label="Verified" 
+                          size="small" 
+                          color="primary" 
+                        />
+                      )}
+                    </Box>
+                    
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                       <Avatar
                         src={service.provider.profile?.profileImage || '/assets/images/default-avatar.png'}
@@ -235,23 +274,20 @@ const BrowseServices = () => {
                         {service.provider.profile?.firstName} {service.provider.profile?.lastName}
                       </Typography>
                     </Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {service.description.substring(0, 100)}
-                      {service.description.length > 100 ? '...' : ''}
+                    
+                    <Rating 
+                      value={4.5} 
+                      precision={0.5} 
+                      size="small" 
+                      readOnly 
+                      sx={{ mb: 1 }}
+                    />
+                    
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, height: 60, overflow: 'hidden' }}>
+                      {service.description}
                     </Typography>
                     
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <StarIcon sx={{ color: 'gold', mr: 0.5, fontSize: 20 }} />
-                      <Typography variant="body2" color="text.secondary" sx={{ mr: 2 }}>
-                        4.8 (24)
-                      </Typography>
-                      <AccessTimeIcon sx={{ color: 'text.secondary', mr: 0.5, fontSize: 20 }} />
-                      <Typography variant="body2" color="text.secondary">
-                        1h call
-                      </Typography>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 2 }}>
                       {service.categories?.map((category) => (
                         <Chip 
                           key={category} 
@@ -262,26 +298,34 @@ const BrowseServices = () => {
                       ))}
                     </Box>
                     
-                    <Typography variant="h6" color="primary">
-                      {service.hourlyRate} coin / saat
-                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="h6" color="primary" fontWeight="bold">
+                        {service.hourlyRate} coins/hour
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <AccessTimeIcon sx={{ color: 'text.secondary', fontSize: 16, mr: 0.5 }} />
+                        <Typography variant="body2" color="text.secondary">
+                          15 min: {calculateCallCost(service.hourlyRate, 15)} coins
+                        </Typography>
+                      </Box>
+                    </Box>
                   </CardContent>
                   <Divider />
-                  <CardActions>
+                  <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between' }}>
                     <Button 
                       size="small" 
-                      onClick={() => viewServiceDetail(service._id)}
+                      onClick={() => navigate(`/member/services/${service._id}`)}
                     >
-                      Detayları Gör
+                      View Details
                     </Button>
                     <Button 
                       size="small" 
                       variant="contained"
-                      onClick={() => navigate(`/member/call/${service._id}`)}
+                      onClick={() => initiateCall(service._id)}
                     >
-                      Çağrıyı Başlat
+                      Start Call
                     </Button>
-                  </CardActions>
+                  </Box>
                 </Card>
               </Grid>
             ))}
@@ -293,6 +337,7 @@ const BrowseServices = () => {
               page={currentPage} 
               onChange={handlePageChange} 
               color="primary"
+              siblingCount={1}
             />
           </Box>
         </>

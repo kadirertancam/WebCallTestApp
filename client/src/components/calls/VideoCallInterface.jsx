@@ -1,17 +1,22 @@
-// client/src/components/calls/VideoCallInterface.jsx
+// Enhanced VideoCallInterface.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Typography, Button, Paper, Grid, Avatar, Chip, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress, Alert } from '@mui/material';
+import { Box, Typography, Button, Paper, Grid, Avatar, Chip, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress, Alert, IconButton } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import CallEndIcon from '@mui/icons-material/CallEnd';
 import MicIcon from '@mui/icons-material/Mic';
 import MicOffIcon from '@mui/icons-material/MicOff';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import VideocamOffIcon from '@mui/icons-material/VideocamOff';
+import ScreenShareIcon from '@mui/icons-material/ScreenShare';
+import StopScreenShareIcon from '@mui/icons-material/StopScreenShare';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import { callService, serviceAdService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const VideoCallInterface = () => {
   const { serviceId } = useParams();
   const navigate = useNavigate();
+  const { currentUser, updateCoins } = useAuth();
   
   // State variables
   const [service, setService] = useState(null);
@@ -22,6 +27,7 @@ const VideoCallInterface = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [showExtendDialog, setShowExtendDialog] = useState(false);
   const [extensionMinutes, setExtensionMinutes] = useState(5);
   const [showRatingDialog, setShowRatingDialog] = useState(false);
@@ -30,6 +36,7 @@ const VideoCallInterface = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [warningShown, setWarningShown] = useState(false);
+  const [coinCost, setCoinCost] = useState(0);
   
   // Refs
   const localVideoRef = useRef(null);
@@ -37,6 +44,7 @@ const VideoCallInterface = () => {
   const timerRef = useRef(null);
   const roomRef = useRef(null);
   const localTracksRef = useRef([]);
+  const screenShareTrackRef = useRef(null);
   
   // Fetch service details
   useEffect(() => {
@@ -45,6 +53,11 @@ const VideoCallInterface = () => {
         const response = await serviceAdService.getServiceById(serviceId);
         setService(response.data);
         setProvider(response.data.provider);
+        
+        // Calculate coin cost
+        const cost = Math.ceil(response.data.hourlyRate * (durationMinutes / 60));
+        setCoinCost(cost);
+        
         setLoading(false);
       } catch (err) {
         setError('Failed to load service details: ' + (err.response?.data?.message || err.message));
@@ -62,6 +75,14 @@ const VideoCallInterface = () => {
       disconnectFromCall();
     };
   }, [serviceId]);
+  
+  // Update coin cost when duration changes
+  useEffect(() => {
+    if (service) {
+      const cost = Math.ceil(service.hourlyRate * (durationMinutes / 60));
+      setCoinCost(cost);
+    }
+  }, [durationMinutes, service]);
   
   // Start timer when call becomes active
   useEffect(() => {
@@ -107,6 +128,12 @@ const VideoCallInterface = () => {
     });
     localTracksRef.current = [];
     
+    // Stop screen sharing if active
+    if (screenShareTrackRef.current) {
+      screenShareTrackRef.current.stop();
+      screenShareTrackRef.current = null;
+    }
+    
     // Clear DOM elements
     if (localVideoRef.current) {
       localVideoRef.current.innerHTML = '';
@@ -118,6 +145,11 @@ const VideoCallInterface = () => {
   
   // Initialize call
   const initiateCall = async () => {
+    if (currentUser.coins < coinCost) {
+      setError(`Insufficient coins. You need ${coinCost} coins for this call.`);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError('');
@@ -130,13 +162,15 @@ const VideoCallInterface = () => {
       
       setCallData(response.data);
       
-      // Connect to Twilio room
-      await connectToTwilioRoom(response.data.memberToken);
+      // Connect to Twilio room using the provided token
+      await connectToTwilioRoom(response.data.twilioToken);
       
       setCallStatus('connecting');
       
-      // After a short delay, consider the call active
-      // In a real implementation, this would be based on provider accepting the call
+      // Update user's coin balance
+      updateCoins(response.data.remainingCoins);
+      
+      // After a short delay, consider the call active (in a real app, this would happen when the provider accepts)
       setTimeout(() => {
         setCallStatus('active');
       }, 3000);
@@ -157,24 +191,35 @@ const VideoCallInterface = () => {
       // Get local video and audio tracks
       const tracks = await createLocalTracks({
         audio: true,
-        video: { width: 640, height: 480 }
+        video: { width: 640, height: 480, facingMode: 'user' }
       });
       
       localTracksRef.current = tracks;
       
       // Attach local video to DOM
       const videoTrack = tracks.find(track => track.kind === 'video');
-      const audioTrack = tracks.find(track => track.kind === 'audio');
-      
       if (videoTrack) {
         const videoElement = videoTrack.attach();
+        videoElement.classList.add('local-video-element');
         localVideoRef.current.appendChild(videoElement);
       }
       
-      // Connect to the room
+      // Connect to the Twilio room
       const room = await connect(token, {
         name: callData.twilioRoom,
-        tracks
+        tracks,
+        bandwidthProfile: {
+          video: {
+            mode: 'collaboration',
+            dominantSpeakerPriority: 'high',
+            renderDimensions: {
+              high: { width: 1280, height: 720 },
+              standard: { width: 640, height: 480 },
+              low: { width: 320, height: 240 }
+            }
+          }
+        },
+        networkQuality: { local: 1, remote: 1 }
       });
       
       roomRef.current = room;
@@ -186,6 +231,7 @@ const VideoCallInterface = () => {
       
       room.on('participantConnected', handleParticipantConnected);
       room.on('participantDisconnected', handleParticipantDisconnected);
+      room.on('disconnected', handleRoomDisconnected);
       
     } catch (err) {
       console.error('Error connecting to Twilio room:', err);
@@ -198,6 +244,7 @@ const VideoCallInterface = () => {
     // Create div for participant's video
     const participantDiv = document.createElement('div');
     participantDiv.id = participant.sid;
+    participantDiv.classList.add('remote-participant');
     remoteVideoRef.current.appendChild(participantDiv);
     
     // Handle participant's existing tracks
@@ -221,6 +268,9 @@ const VideoCallInterface = () => {
   // Handle track subscribed event
   const handleTrackSubscribed = (div, track) => {
     const element = track.attach();
+    if (track.kind === 'video') {
+      element.classList.add('remote-video-element');
+    }
     div.appendChild(element);
   };
   
@@ -232,6 +282,24 @@ const VideoCallInterface = () => {
   // Handle participant disconnection
   const handleParticipantDisconnected = (participant) => {
     document.getElementById(participant.sid)?.remove();
+  };
+  
+  // Handle room disconnection
+  const handleRoomDisconnected = (room, error) => {
+    if (error) {
+      console.error('Room disconnected with error:', error);
+    }
+    
+    // Clean up all participants' elements
+    room.participants.forEach(participant => {
+      document.getElementById(participant.sid)?.remove();
+    });
+    
+    // If call was active and not ended by user, show error
+    if (callStatus === 'active') {
+      setError('Call disconnected unexpectedly. Please try reconnecting.');
+      setCallStatus('ended');
+    }
   };
   
   // Toggle audio mute
@@ -258,6 +326,65 @@ const VideoCallInterface = () => {
       }
       setIsVideoOff(!isVideoOff);
     }
+  };
+  
+  // Toggle screen sharing
+  const toggleScreenShare = async () => {
+    if (isScreenSharing) {
+      // Stop screen sharing
+      if (screenShareTrackRef.current) {
+        screenShareTrackRef.current.stop();
+        
+        // Get the video track that was replaced by screen sharing
+        const videoTrack = localTracksRef.current.find(track => track.kind === 'video');
+        if (videoTrack && roomRef.current) {
+          // Republish the video track
+          roomRef.current.localParticipant.publishTrack(videoTrack);
+        }
+        
+        screenShareTrackRef.current = null;
+      }
+    } else {
+      try {
+        // Request screen share
+        const { createLocalVideoTrack } = await import('twilio-video');
+        const screenTrack = await createLocalVideoTrack({
+          name: 'screen',
+          height: 720,
+          width: 1280,
+          video: { source: 'screen' }
+        });
+        
+        screenShareTrackRef.current = screenTrack;
+        
+        // Unpublish the camera video track
+        const videoTrack = localTracksRef.current.find(track => track.kind === 'video');
+        if (videoTrack && roomRef.current) {
+          roomRef.current.localParticipant.unpublishTrack(videoTrack);
+        }
+        
+        // Publish the screen share track
+        if (roomRef.current) {
+          roomRef.current.localParticipant.publishTrack(screenTrack);
+        }
+        
+        // Listen for the user ending screen sharing via browser UI
+        screenTrack.addEventListener('stopped', () => {
+          setIsScreenSharing(false);
+          screenShareTrackRef.current = null;
+          
+          // Republish camera track
+          if (videoTrack && roomRef.current) {
+            roomRef.current.localParticipant.publishTrack(videoTrack);
+          }
+        });
+      } catch (err) {
+        console.error('Screen sharing error:', err);
+        setError('Failed to share screen: ' + err.message);
+      }
+    }
+    
+    setIsScreenSharing(!isScreenSharing);
   };
   
   // End the call
@@ -299,12 +426,24 @@ const VideoCallInterface = () => {
     try {
       setLoading(true);
       
+      // Calculate additional cost
+      const additionalCost = Math.ceil(service.hourlyRate * (extensionMinutes / 60));
+      
+      // Check if user has enough coins
+      if (currentUser.coins < additionalCost) {
+        setError(`Insufficient coins. You need ${additionalCost} more coins to extend the call.`);
+        return;
+      }
+      
       // Call API to extend call
       const response = await callService.extendCall(callData.call._id, extensionMinutes);
       
       // Update duration
       setDurationMinutes(prev => prev + extensionMinutes);
       setWarningShown(false);
+      
+      // Update user's coin balance
+      updateCoins(response.data.remainingCoins);
       
       // Close dialog
       setShowExtendDialog(false);
@@ -351,6 +490,17 @@ const VideoCallInterface = () => {
     setDurationMinutes(parseInt(event.target.value));
   };
   
+  // Toggle fullscreen
+  const toggleFullscreen = () => {
+    if (remoteVideoRef.current) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        remoteVideoRef.current.requestFullscreen();
+      }
+    }
+  };
+  
   if (loading && !service) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
@@ -378,14 +528,24 @@ const VideoCallInterface = () => {
             <Typography variant="h4" gutterBottom>Start Call with {provider?.profile?.firstName}</Typography>
             
             <Paper sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h5">{service.title}</Typography>
-              <Chip 
-                label={`${service.hourlyRate} coins/hour`} 
-                color="primary" 
-                sx={{ mt: 1, mb: 2 }}
-              />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h5">{service.title}</Typography>
+                <Chip 
+                  label={`${service.hourlyRate} coins/hour`} 
+                  color="primary" 
+                  sx={{ fontWeight: 'bold' }}
+                />
+              </Box>
+              
               <Typography variant="body1" paragraph>
                 {service.description}
+              </Typography>
+              
+              <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                Service Details:
+              </Typography>
+              <Typography variant="body1" paragraph>
+                {service.serviceDetails}
               </Typography>
             </Paper>
             
@@ -395,7 +555,7 @@ const VideoCallInterface = () => {
                 <select 
                   value={durationMinutes} 
                   onChange={handleDurationChange}
-                  style={{ padding: '8px', width: '100%', fontSize: '16px' }}
+                  style={{ padding: '10px', width: '100%', fontSize: '16px', borderRadius: '4px', border: '1px solid #ccc' }}
                 >
                   <option value="5">5 minutes ({Math.ceil(service.hourlyRate * (5/60))} coins)</option>
                   <option value="15">15 minutes ({Math.ceil(service.hourlyRate * (15/60))} coins)</option>
@@ -404,15 +564,49 @@ const VideoCallInterface = () => {
                 </select>
               </Box>
               
-              <Button 
-                variant="contained" 
-                fullWidth 
-                size="large"
-                onClick={initiateCall}
-                disabled={loading}
-              >
-                {loading ? <CircularProgress size={24} /> : 'Start Call Now'}
-              </Button>
+              <Box sx={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                bgcolor: 'primary.light',
+                color: 'primary.contrastText',
+                p: 2,
+                borderRadius: 1,
+                mb: 3
+              }}>
+                <Typography variant="subtitle1">
+                  Total cost for this call:
+                </Typography>
+                <Typography variant="h6" fontWeight="bold">
+                  {coinCost} coins
+                </Typography>
+              </Box>
+              
+              {currentUser.coins < coinCost && (
+                <Alert severity="warning" sx={{ mb: 3 }}>
+                  You don't have enough coins for this call. Please purchase more coins or select a shorter duration.
+                </Alert>
+              )}
+              
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <Button 
+                  variant="outlined" 
+                  onClick={() => navigate('/member/services')}
+                  sx={{ flexGrow: 1 }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="contained" 
+                  fullWidth 
+                  size="large"
+                  onClick={initiateCall}
+                  disabled={loading || currentUser.coins < coinCost}
+                  sx={{ flexGrow: 2 }}
+                >
+                  {loading ? <CircularProgress size={24} /> : 'Start Call Now'}
+                </Button>
+              </Box>
             </Paper>
           </Grid>
           
@@ -421,7 +615,7 @@ const VideoCallInterface = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <Avatar 
                   src={provider?.profile?.profileImage || '/assets/images/default-avatar.png'} 
-                  sx={{ width: 60, height: 60, mr: 2 }}
+                  sx={{ width: 80, height: 80, mr: 2 }}
                 />
                 <Box>
                   <Typography variant="h6">{provider?.profile?.firstName} {provider?.profile?.lastName}</Typography>
@@ -431,8 +625,37 @@ const VideoCallInterface = () => {
                 </Box>
               </Box>
               
+              <Divider sx={{ my: 2 }} />
+              
+              <Typography variant="subtitle2" gutterBottom>
+                Your Balance:
+              </Typography>
+              <Typography variant="h6" color="primary" gutterBottom>
+                {currentUser.coins} coins
+              </Typography>
+              
+              {currentUser.coins < coinCost && (
+                <Button 
+                  variant="contained" 
+                  color="secondary" 
+                  fullWidth
+                  onClick={() => navigate('/member/coins/purchase')}
+                  sx={{ mt: 1 }}
+                >
+                  Purchase Coins
+                </Button>
+              )}
+              
+              <Divider sx={{ my: 2 }} />
+              
+              <Typography variant="subtitle2" gutterBottom>
+                Connection Information:
+              </Typography>
               <Typography variant="body2" paragraph>
-                Rating: 4.8/5 (24 reviews)
+                This call uses secure end-to-end encrypted video via Twilio.
+              </Typography>
+              <Typography variant="body2">
+                Call quality may vary based on your internet connection. A minimum speed of 1Mbps is recommended.
               </Typography>
             </Paper>
           </Grid>
@@ -442,19 +665,25 @@ const VideoCallInterface = () => {
       {(callStatus === 'connecting' || callStatus === 'active') && (
         <Box sx={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
           <Paper sx={{ p: 2, mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6">
-              Call with {provider?.profile?.firstName} {provider?.profile?.lastName}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Avatar 
+                src={provider?.profile?.profileImage || '/assets/images/default-avatar.png'}
+                sx={{ width: 40, height: 40, mr: 2 }}
+              />
+              <Typography variant="h6">
+                {provider?.profile?.firstName} {provider?.profile?.lastName}
+              </Typography>
+            </Box>
             
-            <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Chip 
                 label={callStatus === 'connecting' ? 'Connecting...' : 'Active Call'} 
                 color={callStatus === 'connecting' ? 'warning' : 'success'} 
-                sx={{ mr: 2 }}
               />
               <Chip 
                 label={`Time Remaining: ${formatTime((durationMinutes * 60) - elapsedTime)}`} 
                 color="primary"
+                variant="outlined"
               />
             </Box>
           </Paper>
@@ -469,7 +698,21 @@ const VideoCallInterface = () => {
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
-                position: 'relative'
+                position: 'relative',
+                borderRadius: 2,
+                overflow: 'hidden',
+                '& .remote-video-element': {
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain'
+                },
+                '& .remote-participant': {
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center'
+                }
               }}
             >
               {callStatus === 'connecting' && (
@@ -486,8 +729,27 @@ const VideoCallInterface = () => {
                 }}>
                   <CircularProgress color="inherit" sx={{ mb: 2 }} />
                   <Typography variant="h6">Connecting to {provider?.profile?.firstName}...</Typography>
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    Please wait while we establish a secure connection
+                  </Typography>
                 </Box>
               )}
+              
+              <IconButton
+                onClick={toggleFullscreen}
+                sx={{
+                  position: 'absolute',
+                  top: 10,
+                  right: 10,
+                  bgcolor: 'rgba(0,0,0,0.5)',
+                  color: 'white',
+                  '&:hover': {
+                    bgcolor: 'rgba(0,0,0,0.7)'
+                  }
+                }}
+              >
+                <FullscreenIcon />
+              </IconButton>
             </Box>
             
             {/* Local video (small overlay) */}
@@ -499,13 +761,15 @@ const VideoCallInterface = () => {
                 maxWidth: 200,
                 minWidth: 160,
                 height: 'auto',
-                bottom: 20, 
+                aspectRatio: '16/9',
+                bottom: 80, 
                 right: 20, 
                 bgcolor: 'black',
                 borderRadius: 2,
                 overflow: 'hidden',
                 boxShadow: 3,
-                '& video': {
+                border: '2px solid white',
+                '& .local-video-element': {
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover'
@@ -520,24 +784,18 @@ const VideoCallInterface = () => {
               justifyContent: 'center',
               alignItems: 'center',
               gap: 2,
-              bgcolor: 'background.paper'
+              bgcolor: 'background.paper',
+              borderRadius: 2,
+              mt: 2
             }}>
               <Button 
                 variant="contained" 
                 color={isMuted ? 'error' : 'primary'}
                 onClick={toggleMute}
                 startIcon={isMuted ? <MicOffIcon /> : <MicIcon />}
+                sx={{ borderRadius: 8, px: 3 }}
               >
                 {isMuted ? 'Unmute' : 'Mute'}
-              </Button>
-              
-              <Button 
-                variant="contained" 
-                color="error"
-                onClick={endCall}
-                startIcon={<CallEndIcon />}
-              >
-                End Call
               </Button>
               
               <Button 
@@ -545,8 +803,29 @@ const VideoCallInterface = () => {
                 color={isVideoOff ? 'error' : 'primary'}
                 onClick={toggleVideo}
                 startIcon={isVideoOff ? <VideocamOffIcon /> : <VideocamIcon />}
+                sx={{ borderRadius: 8, px: 3 }}
               >
                 {isVideoOff ? 'Start Video' : 'Stop Video'}
+              </Button>
+              
+              <Button 
+                variant="contained" 
+                color={isScreenSharing ? 'secondary' : 'primary'}
+                onClick={toggleScreenShare}
+                startIcon={isScreenSharing ? <StopScreenShareIcon /> : <ScreenShareIcon />}
+                sx={{ borderRadius: 8, px: 3 }}
+              >
+                {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+              </Button>
+              
+              <Button 
+                variant="contained" 
+                color="error"
+                onClick={endCall}
+                startIcon={<CallEndIcon />}
+                sx={{ borderRadius: 8, px: 3 }}
+              >
+                End Call
               </Button>
             </Box>
           </Box>
@@ -579,6 +858,12 @@ const VideoCallInterface = () => {
             <option value={15}>15 minutes ({Math.ceil(service?.hourlyRate * (15/60))} coins)</option>
             <option value={30}>30 minutes ({Math.ceil(service?.hourlyRate * (30/60))} coins)</option>
           </TextField>
+          
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'primary.light', borderRadius: 1 }}>
+            <Typography variant="subtitle2" color="primary.contrastText">
+              Your current balance: {currentUser.coins} coins
+            </Typography>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowExtendDialog(false)}>Cancel</Button>
@@ -603,7 +888,7 @@ const VideoCallInterface = () => {
                 onClick={() => setRating(star)}
                 sx={{
                   cursor: 'pointer',
-                  fontSize: '2rem',
+                  fontSize: '2.5rem',
                   color: star <= rating ? 'gold' : 'gray',
                   '&:hover': {
                     transform: 'scale(1.2)'
@@ -622,6 +907,7 @@ const VideoCallInterface = () => {
             fullWidth
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
+            placeholder="Share your experience with this service provider..."
           />
         </DialogContent>
         <DialogActions>

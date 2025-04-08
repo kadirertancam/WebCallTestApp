@@ -1,12 +1,16 @@
-// client/src/pages/provider/CreateService.jsx - Enhanced version
+// src/pages/provider/CreateService.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Formik, Form, Field } from 'formik';
 import * as Yup from 'yup';
-import { Box, Typography, Button, Grid, Paper, CircularProgress, Alert, FormControl, InputLabel, MenuItem } from '@mui/material';
-import { TextField, Select } from 'formik-mui';
+import { 
+  Box, Typography, Button, Grid, Paper, CircularProgress, 
+  Alert, FormControl, InputLabel, MenuItem, Select, 
+  TextField, FormHelperText
+} from '@mui/material';
 import { serviceAdService } from '../../services/api';
 
+// Schema remains the same
 const ServiceSchema = Yup.object().shape({
   title: Yup.string().required('Title is required').max(100, 'Title is too long'),
   hourlyRate: Yup.number().required('Hourly rate is required').min(1, 'Minimum rate is 1 coin'),
@@ -23,7 +27,7 @@ const CreateService = () => {
   const handleSubmit = async (values, { setSubmitting, resetForm }) => {
     try {
       setSubmitError('');
-      const response = await serviceAdService.createAd({
+      await serviceAdService.createAd({
         title: values.title,
         hourlyRate: values.hourlyRate,
         categories: [values.category],
@@ -71,38 +75,48 @@ const CreateService = () => {
           validationSchema={ServiceSchema}
           onSubmit={handleSubmit}
         >
-          {({ isSubmitting }) => (
+          {({ isSubmitting, values, errors, touched, handleChange, handleBlur }) => (
             <Form>
               <Grid container spacing={3}>
                 <Grid item xs={12}>
-                  <Field
-                    component={TextField}
+                  <TextField
                     name="title"
                     label="Service Title"
                     fullWidth
                     required
                     placeholder="e.g., Business Consulting"
+                    value={values.title}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    error={touched.title && Boolean(errors.title)}
+                    helperText={touched.title && errors.title}
                   />
                 </Grid>
                 
                 <Grid item xs={12} md={6}>
-                  <Field
-                    component={TextField}
+                  <TextField
                     name="hourlyRate"
                     label="Hourly Rate (coins)"
                     type="number"
                     fullWidth
                     required
                     inputProps={{ min: 1 }}
+                    value={values.hourlyRate}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    error={touched.hourlyRate && Boolean(errors.hourlyRate)}
+                    helperText={touched.hourlyRate && errors.hourlyRate}
                   />
                 </Grid>
                 
                 <Grid item xs={12} md={6}>
-                  <FormControl fullWidth required>
+                  <FormControl fullWidth required error={touched.category && Boolean(errors.category)}>
                     <InputLabel>Category</InputLabel>
-                    <Field
-                      component={Select}
+                    <Select
                       name="category"
+                      value={values.category}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
                       label="Category"
                     >
                       <MenuItem value="business">Business</MenuItem>
@@ -112,13 +126,15 @@ const CreateService = () => {
                       <MenuItem value="finance">Finance</MenuItem>
                       <MenuItem value="creative">Creative</MenuItem>
                       <MenuItem value="education">Education</MenuItem>
-                    </Field>
+                    </Select>
+                    {touched.category && errors.category && (
+                      <FormHelperText>{errors.category}</FormHelperText>
+                    )}
                   </FormControl>
                 </Grid>
                 
                 <Grid item xs={12}>
-                  <Field
-                    component={TextField}
+                  <TextField
                     name="description"
                     label="Short Description"
                     fullWidth
@@ -126,12 +142,16 @@ const CreateService = () => {
                     multiline
                     rows={2}
                     placeholder="Brief overview of your service (max 150 characters)"
+                    value={values.description}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    error={touched.description && Boolean(errors.description)}
+                    helperText={touched.description && errors.description}
                   />
                 </Grid>
                 
                 <Grid item xs={12}>
-                  <Field
-                    component={TextField}
+                  <TextField
                     name="serviceDetails"
                     label="Detailed Description"
                     fullWidth
@@ -139,6 +159,11 @@ const CreateService = () => {
                     multiline
                     rows={5}
                     placeholder="Provide a detailed description of what your service includes, your expertise, and what clients can expect"
+                    value={values.serviceDetails}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    error={touched.serviceDetails && Boolean(errors.serviceDetails)}
+                    helperText={touched.serviceDetails && errors.serviceDetails}
                   />
                 </Grid>
                 

@@ -15,7 +15,7 @@
         "connect-redis": "^5.2.0",
         "cors": "^2.8.5",
         "dotenv": "^16.0.3",
-        "express": "^4.18.2",
+        "express": "^4.21.2",
         "express-mongo-sanitize": "^2.2.0",
         "express-rate-limit": "^6.7.0",
         "express-session": "^1.18.1",
@@ -29,7 +29,13 @@
         "redis": "^4.6.6",
         "twilio": "^4.11.0",
         "winston": "^3.8.2",
-        "xss-clean": "^0.1.1"
+        "xss-clean": "^0.1.1",
+        "@mui/material": "^5.14.0",
+        "@emotion/react": "^11.11.0",
+        "@emotion/styled": "^11.11.0",
+        "formik": "^2.4.2",
+        "formik-material-ui": "^4.0.0-alpha.2",
+        "yup": "^1.2.0"
     },
     "devDependencies": {
         "jest": "^29.5.0",
