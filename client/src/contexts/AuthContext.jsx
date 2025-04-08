@@ -1,6 +1,6 @@
 // client/src/contexts/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authService, userService } from '../services/api'; // Import userService
+import { authService, userService } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext();
@@ -11,6 +11,7 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false); // Make sure this is defined in this component
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -19,13 +20,14 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const response = await userService.getCurrentUser(); // Use userService
-        setCurrentUser(response.data);
+        const response = await userService.getCurrentUser();
+        setCurrentUser(response.data.data || response.data);
+        setIsAuthenticated(true); // Set authenticated to true when user is loaded
       } catch (err) {
-        // Clear storage if token is invalid
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setCurrentUser(null);
+        setIsAuthenticated(false);
       }
       setLoading(false);
     };
@@ -50,42 +52,20 @@ export function AuthProvider({ children }) {
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
       setCurrentUser(user);
+      setIsAuthenticated(true); // This should now work since we defined the state in this component
       
       // Redirect based on role
       if (user.role === 'admin') {
         navigate('/admin/dashboard');
+      } else if (user.role === 'user') {
+        navigate('/provider/dashboard');
       } else {
-        navigate('/dashboard');
+        navigate('/member/dashboard');
       }
       
       return user;
     } catch (err) {
       const message = err.response?.data?.message || 'Login failed';
-      setError(message);
-      throw new Error(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Register function
-  const register = async (userData) => {
-    try {
-      console.log('Register Data:', userData);
-      setError('');
-      setLoading(true);
-      
-      const response = await authService.register(userData);
-      const { token, user } = response.data;
-      console.log('Register Response:', response);
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      setCurrentUser(user);
-      
-      navigate('/dashboard');
-      return user;
-    } catch (err) {
-      const message = err.response?.data?.message || 'Registration failed';
       setError(message);
       throw new Error(message);
     } finally {
@@ -101,50 +81,20 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       setCurrentUser(null);
+      setIsAuthenticated(false); // Set authenticated to false on logout
       navigate('/login');
     }
   };
 
-  // Update user profile
-  const updateProfile = async (profileData) => {
-    try {
-      setError('');
-      setLoading(true);
-      
-      const response = await userService.updateProfile(profileData); // Use userService
-      const updatedUser = response.data;
-      
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      setCurrentUser(updatedUser);
-      
-      return updatedUser;
-    } catch (err) {
-      const message = err.response?.data?.message || 'Update failed';
-      setError(message);
-      throw new Error(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Update coin balance
-  const updateCoins = (newBalance) => {
-    if (currentUser) {
-      const updatedUser = { ...currentUser, coins: newBalance };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      setCurrentUser(updatedUser);
-    }
-  };
-
+  // Include isAuthenticated in the value object
   const value = {
     currentUser,
     loading,
     error,
+    isAuthenticated, // Make sure you include this in the context value
     login,
-    register,
     logout,
-    updateProfile,
-    updateCoins
+    // Include other functions you have
   };
 
   return (

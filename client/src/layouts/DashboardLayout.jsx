@@ -48,6 +48,7 @@ const DashboardLayout = ({ userRole, isAuthenticated, onLogout }) => {
 
   // If not authenticated, redirect to login
   React.useEffect(() => {
+    console.log(isAuthenticated);
     if (!isAuthenticated) {
       navigate('/login');
     }

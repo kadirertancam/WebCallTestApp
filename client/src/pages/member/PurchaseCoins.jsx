@@ -123,9 +123,11 @@ const PurchaseCoins = () => {
     const fetchPackages = async () => {
       try {
         const response = await coinService.getPackages();
-        setCoinPackages(response.data);
-        if (response.data.length > 0) {
-          setSelectedPackage(response.data[0].id);
+        // Eğer API'den dönen veri bir dizi değilse, varsayılan olarak boş bir dizi kullan.
+        const packages = Array.isArray(response.data) ? response.data : (response.data.packages || []);
+        setCoinPackages(packages);
+        if (packages.length > 0) {
+          setSelectedPackage(packages[0].id);
         }
         setLoading(false);
       } catch (err) {
@@ -140,6 +142,7 @@ const PurchaseCoins = () => {
   const getSelectedPackageDetails = () => {
     return coinPackages.find(pkg => pkg.id === selectedPackage) || null;
   };
+  
   const handlePurchase = () => {
     // Simulate purchase
     setSuccess(true);
@@ -147,6 +150,7 @@ const PurchaseCoins = () => {
       navigate('/member/dashboard');
     }, 2000);
   };
+  
   const handlePaymentSuccess = (data) => {
     setSuccess(true);
     updateCoins(data.newBalance);
@@ -246,10 +250,10 @@ const PurchaseCoins = () => {
               
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                 <Typography variant="body1">
-                  {packageDetails.name} Package
+                  {packageDetails?.name} Package
                 </Typography>
                 <Typography variant="body1">
-                  {packageDetails.coins} coins
+                  {packageDetails?.coins} coins
                 </Typography>
               </Box>
               
@@ -258,7 +262,7 @@ const PurchaseCoins = () => {
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
                 <Typography variant="body1" fontWeight="bold">Total</Typography>
                 <Typography variant="body1" fontWeight="bold">
-                  ${packageDetails.price.toFixed(2)}
+                  ${packageDetails?.price.toFixed(2)}
                 </Typography>
               </Box>
             </CardContent>
@@ -268,6 +272,5 @@ const PurchaseCoins = () => {
     </Box>
   );
 };
-
 
 export default PurchaseCoins;

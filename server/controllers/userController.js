@@ -1,7 +1,9 @@
 // server/controllers/userController.js
 const User = require('../models/User');
 const { AppError } = require('../utils/errorHandler');
-const cloudinary = require('../config/cloudinary');
+
+// Comment out this line to remove the cloudinary dependency
+// const cloudinary = require('../config/cloudinary');
 
 // Get current user's profile
 exports.getCurrentUser = async (req, res) => {
@@ -76,36 +78,25 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
-// Upload profile image
+// Simplified uploadProfileImage without cloudinary
 exports.uploadProfileImage = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded' });
-    }
-    
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: 'profile_images',
-      transformation: [
-        { width: 400, height: 400, crop: 'fill' }
-      ]
-    });
-    
-    // Update user profile
+    // For now, just save a placeholder URL
     const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     
     if (!user.profile) user.profile = {};
-    user.profile.profileImage = result.secure_url;
+    // Use a placeholder URL
+    user.profile.profileImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.profile.firstName || '')}+${encodeURIComponent(user.profile.lastName || '')}&background=random`;
     
     await user.save();
     
     res.json({
       message: 'Profile image updated',
       data: {
-        imageUrl: result.secure_url
+        imageUrl: user.profile.profileImage
       }
     });
   } catch (error) {
@@ -114,7 +105,7 @@ exports.uploadProfileImage = async (req, res) => {
   }
 };
 
-// Admin: Get all users
+// Admin: Get all users - keep this if you need admin functionality
 exports.getAllUsers = async (req, res) => {
   try {
     const { role, query, page = 1, limit = 10 } = req.query;

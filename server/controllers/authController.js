@@ -8,11 +8,12 @@ const { AppError } = require('../utils/errorHandler');
 // Generate tokens
 const generateTokens = (userId, role) => {
   // Access token - short lived
-  const accessToken = jwt.sign(
-    { id: userId, role },
-    process.env.JWT_SECRET || 'your_jwt_secret',
-    { expiresIn: '1h' }
-  );
+// In generateTokens function
+const accessToken = jwt.sign(
+  { id: userId, role },
+  process.env.JWT_SECRET || 'your_jwt_secret', // Make sure this fallback is in place
+  { expiresIn: '1h' }
+);
   
   // Refresh token - longer lived
   const refreshToken = jwt.sign(
@@ -100,6 +101,10 @@ exports.getCurrentUser = (req, res) => {
 // Login user
 exports.login = async (req, res) => {
   try {
+    console.log("Login attempt with:", { 
+      email: req.body.email, 
+      passwordProvided: !!req.body.password 
+    });
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
