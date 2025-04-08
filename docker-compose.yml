@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Veritabanı
+  postgres:
+    image: postgres:15-alpine
+    container_name: project_postgres
+    environment:
+      POSTGRES_DB: myapp_db
+      POSTGRES_USER: myapp_user
+      POSTGRES_PASSWORD: strong_password_123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend_network
+
+  # MongoDB Veritabanı  
+  mongodb:
+    image: mongo:6-jammy
+    container_name: project_mongodb
+    environment:
+      MONGO_INITDB_DATABASE: myapp_mongo_db
+      MONGO_INITDB_ROOT_USERNAME: myapp_mongo_user
+      MONGO_INITDB_ROOT_PASSWORD: strong_mongo_password_123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - backend_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: project_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend_network
+
+  # pgAdmin (PostgreSQL Yönetim Arayüzü)
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: project_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin_password_123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - backend_network
+
+  # Mongo Express (MongoDB Yönetim Arayüzü)
+  mongo-express:
+    image: mongo-express
+    container_name: project_mongo_express
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: myapp_mongo_user
+      ME_CONFIG_MONGODB_ADMINPASSWORD: strong_mongo_password_123
+      ME_CONFIG_MONGODB_URL: mongodb://myapp_mongo_user:strong_mongo_password_123@mongodb:27017/
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongodb
+    networks:
+      - backend_network
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:
+
+networks:
+  backend_network:
+    driver: bridge
